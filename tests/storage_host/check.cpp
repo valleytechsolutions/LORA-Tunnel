@@ -103,6 +103,7 @@ struct FakeSd {
   int cardType(){return type;}
   bool mkdir(const char*){return directoryOK;}
 } SD;
+inline FakeSd& sdCard(){return SD;}
 uint32_t millis(){return ++tick;}
 void xSemaphoreTake(int,int){check(!fake::busHeld,"recursive bus lock");fake::busHeld=true;}
 void xSemaphoreGive(int){check(fake::busHeld,"unlock without lock");fake::busHeld=false;}

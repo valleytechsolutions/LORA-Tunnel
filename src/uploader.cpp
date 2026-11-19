@@ -9,7 +9,7 @@
 #include "checked_sd_file.h"
 #include "board_config.h"
 #include "version.h"
-#include <SD.h>
+#include "sd_card.h"
 #include <WiFi.h>
 #include <esp_http_client.h>
 #include <esp_crt_bundle.h>
@@ -103,7 +103,7 @@ bool stopped(){return cancelled.load(std::memory_order_relaxed);}
 bool delayUntil(uint32_t duration){const uint32_t start=millis();while(millis()-start<duration){if(stopped())return false;vTaskDelay(pdMS_TO_TICKS(50));}return true;}
 // Keep Cardputer's stdio cache bounded; every caller already owns StorageLock.
 File openFile(const char* path,const char* mode=FILE_READ) {
-  File file=SD.open(path,mode);
+  File file=sdCard().open(path,mode);
 #if defined(LORA_TUNNEL_CARDPUTER_ADV)
   if(file&&!file.isDirectory()&&!file.setBufferSize(512))file.close();
 #endif
@@ -179,7 +179,7 @@ bool loadCheckpoint(const char* directory,int service,int chunk,const char* hash
   result=Checkpoint{};bool found=false,existed=false;
   for(unsigned slot=0;slot<2;++slot) {
     char path[144];checkpointPath(path,directory,service,chunk,slot);StaticJsonDocument<1024> doc;
-    StorageLock lock;existed=existed||SD.exists(path);File file=openFile(path,FILE_READ);if(!file)continue;
+    StorageLock lock;existed=existed||sdCard().exists(path);File file=openFile(path,FILE_READ);if(!file)continue;
     const bool ok=file.size()<=1024&&!deserializeJson(doc,file);file.close();
     if(!ok||!doc["generation"].is<uint32_t>()||strcmp(doc["sha256"]|"",hash)||doc["source_bytes"].as<size_t>()!=bytes)continue;
     const char* state=doc["state"]|"";if(!*state||strlen(state)>=sizeof(result.state))continue;
@@ -380,7 +380,7 @@ void pollSessionJobs(Work& work,const char* directory,const char* hash,size_t by
     // Process each chunk once even when both alternating slots exist. The
     // loader still validates both and chooses the newest valid generation.
     if(!slot){char other[144];checkpointPath(other,directory,2,int(chunk),1);
-      StorageLock lock;if(SD.exists(other))continue;}
+      StorageLock lock;if(sdCard().exists(other))continue;}
     Checkpoint cp;if(!loadCheckpoint(directory,2,int(chunk),hash,bytes,cp))continue;
     if((strcmp(cp.state,"job")&&strcmp(cp.state,"authjob"))||!upload::safeJobId(cp.job))continue;
     if(!processChunk(work,directory,hash,bytes,chunk,false))break;
@@ -393,7 +393,7 @@ __attribute__((noinline)) void processSession(Work& work,const char* path) {
   char hash[65];size_t bytes=0;if(!closedSession(path,hash,bytes,parser.line,*parser.doc))return;
   char directory[100];snprintf(directory,sizeof(directory),"%s/%s",root,hash);
   if(work.pollOnly){parser.release();pollSessionJobs(work,directory,hash,bytes);return;}
-  {StorageLock lock;if(!SD.mkdir(directory)){workStatus(work,"Cannot create upload checkpoints on SD");return;}}
+  {StorageLock lock;if(!sdCard().mkdir(directory)){workStatus(work,"Cannot create upload checkpoints on SD");return;}}
   bool alreadyComplete=true;
   for(int service=0;service<3;++service)if(work.mask&(1U<<service)) {
     Checkpoint complete;loadCheckpoint(directory,service,-2,hash,bytes,complete);
@@ -463,7 +463,7 @@ void worker(void* argument) {
     selfCheckState=ok?2:3;
     status(ok?"Offline upload memory check passed":"Offline upload memory check failed");
   } else {
-    if(ok) {StorageLock lock;ok=SD.mkdir(root);if(!ok)status("Upload staging unavailable");}
+    if(ok) {StorageLock lock;ok=sdCard().mkdir(root);if(!ok)status("Upload staging unavailable");}
     if(ok)ok=associate(*work);
     if(ok) {
       associationFailures=0;

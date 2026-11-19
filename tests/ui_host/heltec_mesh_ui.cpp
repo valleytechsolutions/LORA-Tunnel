@@ -21,8 +21,13 @@ void callback(ui::Action action,int value,const char* text) {sent.push_back({act
 void expect(bool ok,const char* message) {++assertions;if(!ok){std::cerr<<"FAIL: "<<message<<"\n";std::exit(1);}}
 std::string quote(const std::string& text) {std::string out="\"";for(char c:text){if(c=='\\'||c=='\"')out+='\\';out+=c;}return out+'\"';}
 void paint(const ui::Model& model) {
-  gfx().commands.clear();fullClearNeeded=true;
+  target().commands.clear();fullClearNeeded=true;
   if(page==Page::Home)home(model);
+  else if(page==Page::Wardriver)wardriver(model);
+  else if(page==Page::Recon)recon(model);
+  else if(page==Page::ReconDetail)reconDetail();
+  else if(page==Page::Credentials)credentials(model);
+  else if(page==Page::Regions)regions(model);
   else if(page==Page::Messages)messageScreen(model);
   else if(page==Page::Keyboard)drawKeyboard();
   else if(page==Page::Settings)settings(model);
@@ -32,11 +37,11 @@ void paint(const ui::Model& model) {
 }
 void capture(const char* directory,const char* name,const ui::Model& model) {
   paint(model);std::ofstream out(std::string(directory)+"/"+name+".json",std::ios::binary);out<<"[";bool first=true;
-  for(const auto& c:gfx().commands){if(!first)out<<",";first=false;
+  for(const auto& c:target().commands){if(!first)out<<",";first=false;
     out<<"{\"kind\":"<<quote(c.kind)<<",\"text\":"<<quote(c.text)<<",\"x\":"<<c.x<<",\"y\":"<<c.y<<",\"w\":"<<c.w<<",\"h\":"<<c.h<<",\"r\":"<<c.r<<",\"color\":"<<c.color<<",\"scale\":"<<c.scale<<"}";}
   out<<"]\n";expect(bool(out),"preview commands written");
 }
-bool screenHas(const char* text) {for(const auto& c:gfx().commands)if(c.text.find(text)!=std::string::npos)return true;return false;}
+bool screenHas(const char* text) {for(const auto& c:target().commands)if(c.text.find(text)!=std::string::npos)return true;return false;}
 void tap(int x,int y,const ui::Model& m) {touchAction(uint16_t(x),uint16_t(y),m);paint(m);}
 void press(uint8_t key,const ui::Model& m) {ui::navigation(key,m);paint(m);}
 void touchTick(hw::TouchState state,uint16_t x,uint16_t y,uint32_t elapsed,const ui::Model& m) {
@@ -164,6 +169,96 @@ void messagingChecks(const char* output,ui::Model& m) {
   messageState.screen=Screen::Menu;press(hw::Back,m);m.messages={};m.running=true;tap(100,260,m);tap(100,105,m);expect(messageState.screen==Screen::Mode&&sent.back().action==ui::Action::StartMessages,"active capture leaves chooser visible and asks root to report stop/save first");press(hw::Back,m);m.running=false;messageEditor=false;
 }
 }
+bool textOverlaps() {
+  const auto& c=target().commands;
+  for(size_t i=0;i<c.size();++i)for(size_t j=i+1;j<c.size();++j) {
+    if(c[i].kind!="text"||c[j].kind!="text"||!c[i].w||!c[j].w)continue;
+    if(c[i].x<c[j].x+c[j].w&&c[j].x<c[i].x+c[i].w&&c[i].y<c[j].y+c[j].h&&c[j].y<c[i].y+c[i].h) {
+      std::cerr<<"overlap: \""<<c[i].text<<"\" @"<<c[i].x<<","<<c[i].y<<" / \""<<c[j].text<<"\" @"<<c[j].x<<","<<c[j].y<<"\n";return true;
+    }
+  }
+  return false;
+}
+// Rotatable targets map the portrait layout onto 320x240. Every page and focus
+// outline must stay on the landscape surface, and text rows must not collide.
+void reconFilterChecks(const char* output,ui::Model m,const char* preview) {
+  using tunnel::recon::Category;
+  std::strcpy(m.recon_recent[0],"Flock camera");m.recon_categories[0]=uint8_t(Category::Flock);
+  std::strcpy(m.recon_recent[1],"AirTag");m.recon_categories[1]=uint8_t(Category::AirTag);
+  reconFilter=0;setPage(Page::Recon);paint(m);expect(screenHas("FILTER: ALL v"),"closed filter shows a dropdown caret");
+  const size_t before=sent.size();
+  tap(90,90,m);expect(reconFilterOpen&&screenHas("FILTER: ALL ^")&&!textOverlaps(),"filter tap opens the dropdown");
+  for(uint8_t c=0;c<=LAST_CATEGORY;++c)expect(screenHas(categoryShort(c)),"dropdown lists every category");
+  {Rect targets[MAX_TARGETS];const size_t count=focusTargets(m,targets);expect(count==LAST_CATEGORY+1u,"open dropdown focuses only its options");
+   for(size_t i=0;i<count;++i){focusVisible=true;focusIndex=int(i);paint(m);++assertions;}focusVisible=false;focusIndex=-1;}
+  capture(output,preview,m);
+  const Rect flock=filterOption(uint8_t(Category::Flock));tap(flock.x+5,flock.y+5,m);
+  expect(!reconFilterOpen&&reconFilter==uint8_t(Category::Flock)&&screenHas("Flock camera")&&!screenHas("AirTag"),"choosing an option applies the filter and closes");
+  tap(90,90,m);tap(120,55,m);
+  expect(!reconFilterOpen&&reconFilter==uint8_t(Category::Flock)&&page==Page::Recon&&sent.size()==before,"tapping outside dismisses without touching controls beneath");
+  tap(90,90,m);press(hw::Back,m);expect(!reconFilterOpen&&page==Page::Recon,"Back closes the dropdown before leaving Recon");
+  m.buttons_enabled=true;focusIndex=0;press(hw::Select,m);
+  expect(reconFilterOpen&&focusIndex==int(Category::Flock),"physical Select opens with the current filter focused");
+  press(hw::Next,m);press(hw::Select,m);
+  expect(!reconFilterOpen&&reconFilter==uint8_t(Category::Flock)+1,"physical buttons choose the next category");
+  reconFilter=0;focusVisible=false;focusIndex=-1;sent.resize(before);
+}
+void landscapeChecks(const char* output,ui::Model m) {
+  using ui::messages::Screen;
+  hw::hostRotatable=true;hw::setDisplayLandscape(true);buffered=true;applyOrientation();
+  expect(landscapeUi&&frame.width==320&&frame.height==240,"landscape swaps framebuffer dimensions");
+  m.running=true;m.battery=4.01f;m.gps=true;std::strcpy(m.notice,"Landscape notice text for wrapping checks on settings");
+  const struct {Page page;const char* name;} pages[]={{Page::Home,"landscape-home"},{Page::Wardriver,"landscape-wardriver"},
+    {Page::Recon,"landscape-recon"},{Page::ReconDetail,"landscape-recon-detail"},{Page::Settings,"landscape-settings"},
+    {Page::Credentials,"landscape-credentials"},{Page::Regions,"landscape-regions"},{Page::Keyboard,"landscape-keyboard"},
+    {Page::MeshSettings,"landscape-mesh-settings"}};
+  for(const auto& entry:pages) {
+    setPage(entry.page);paint(m);expect(!textOverlaps(),"landscape text rows do not overlap");
+    Rect targets[MAX_TARGETS];const size_t count=focusTargets(m,targets);
+    for(size_t i=0;i<count;++i){focusVisible=true;focusIndex=int(i);paint(m);++assertions;}
+    focusVisible=false;focusIndex=-1;capture(output,entry.name,m);
+  }
+  setPage(Page::Keyboard);messageEditor=true;messageState={};messageState.composing=true;
+  for(unsigned i=0;i<140;++i)append(char('a'+i%26));paint(m);
+  expect(!textOverlaps(),"landscape compose lines do not overlap");capture(output,"landscape-compose",m);
+  messageEditor=false;eraseInput();
+  reconFilterChecks(output,m,"landscape-recon-filter");
+  for(Screen screen:{Screen::Mode,Screen::Menu,Screen::Inbox,Screen::Contacts,Screen::Settings,Screen::Identity}) {
+    messageState={};messageState.screen=screen;messagePage=0;setPage(Page::Messages);paint(m);
+    Rect targets[MAX_TARGETS];const size_t count=focusTargets(m,targets);
+    for(size_t i=0;i<count;++i){focusVisible=true;focusIndex=int(i);paint(m);++assertions;}
+  }
+  messageState={};messageState.screen=Screen::Menu;setPage(Page::Messages);capture(output,"landscape-messages",m);
+  // Settings exposes the orientation toggle only on rotatable targets.
+  setPage(Page::Settings);paint(m);expect(screenHas("DISPLAY: LANDSCAPE"),"rotatable settings show orientation");
+  tap(120,222,m);
+  expect(!hw::hostLandscape&&!landscapeUi&&frame.width==240&&frame.height==320&&screenHas("DISPLAY: PORTRAIT"),"toggle switches to portrait");
+  capture(output,"portrait-rotatable-settings",m);
+  tap(120,222,m);expect(hw::hostLandscape&&landscapeUi,"toggle returns to landscape");
+  // Panel touch coordinates are mapped back to the portrait layout.
+  splashShown=onboardingShown=true;bootAt=0;wasPressed=false;touchReleasePending=false;hostMillis=20000;
+  touchTick(false,0,0,1,m);
+  touchTick(true,160,uint16_t(222*3/4),1,m);
+  expect(!hw::hostLandscape&&!landscapeUi,"landscape touch hits the mapped display row");
+  touchTick(false,0,0,100,m);
+  hw::hostRotatable=false;hw::setDisplayLandscape(false);applyOrientation();
+  expect(frame.width==240&&frame.height==320,"fixed targets keep portrait");
+  setPage(Page::Settings);paint(m);expect(!screenHas("DISPLAY:"),"fixed targets hide orientation toggle");
+  expect(!screenHas("ALERT VOLUME"),"boards without a codec hide alert volume");
+  // Codec boards add an alert volume row that cycles 25/50/75/100 percent.
+  hw::hostRotatable=true;hw::hostVolumeAdjustable=true;hw::hostVolume=75;hw::setDisplayLandscape(true);applyOrientation();
+  setPage(Page::Settings);paint(m);
+  expect(screenHas("ALERT VOLUME: 75%")&&screenHas("DISPLAY: LANDSCAPE")&&!textOverlaps(),"six settings rows fit in landscape");
+  {Rect targets[MAX_TARGETS];const size_t count=focusTargets(m,targets);expect(count>=8,"volume row is focusable");
+   for(size_t i=0;i<count;++i){focusVisible=true;focusIndex=int(i);paint(m);++assertions;}focusVisible=false;focusIndex=-1;}
+  capture(output,"landscape-settings-volume",m);
+  hw::hostLastToneHz=0;tap(120,224,m);
+  expect(hw::hostVolume==100&&hw::hostLastToneHz!=0&&screenHas("ALERT VOLUME: 100%"),"volume steps up with a preview tone");
+  tap(120,224,m);expect(hw::hostVolume==25,"volume wraps to the lowest level");
+  tap(120,192,m);expect(!hw::hostLandscape&&hw::hostVolume==25,"display row still toggles orientation");
+  paint(m);expect(!textOverlaps(),"six settings rows fit in portrait");capture(output,"portrait-settings-volume",m);
+  hw::hostVolumeAdjustable=false;hw::hostRotatable=false;hw::setDisplayLandscape(false);applyOrientation();
+}
 int main(int argc,char** argv) {
   expect(argc==2,"output directory supplied");const char* output=argv[1];
   ui::Model model;model.sd=model.region_configured=model.region_selection_made=true;
@@ -230,6 +325,8 @@ int main(int argc,char** argv) {
   }
   messagingChecks(output,model);
   touchGestureChecks();
+  reconFilterChecks(output,model,"recon-filter");
+  landscapeChecks(output,model);
   expect(!hostAllocationCount,"mesh and messaging pages require no new framebuffer allocation");
   std::cout<<"Heltec mesh UI: "<<assertions<<" checks passed; all draw and button-focus bounds checked. Synthetic previews only.\n";
 }

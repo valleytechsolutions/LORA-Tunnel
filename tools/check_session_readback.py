@@ -23,6 +23,7 @@ SCHEMA_PATH = ROOT / "schemas" / "observation-v1.schema.json"
 TARGET_BOARDS = {
     "cardputer-adv-lora1262": "Cardputer ADV + LoRa-1262 U214",
     "heltec-v4-r8-tft": "Heltec V4-R8 Expansion V2",
+    "wio-tracker-l2": "Seeed Wio Tracker L2",
 }
 RADIO_TYPES = ("wifi", "ble", "lora")
 COUNTER_NAMES = ("ingress_drops", "log_drops", "storage_errors", "radio_errors", "ui_skips")

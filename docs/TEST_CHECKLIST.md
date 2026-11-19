@@ -210,8 +210,8 @@ Use a copy of this checklist for each hardware revision.
   stale summaries. Keep aircraft/operator/takeoff coordinates separate from
   receiver GPS and display fields only when actually decoded. No physical
   capture is established by the synthetic parser tests.
-- [ ] Fill Recon's eight-row window, cycle all category filters including
-  Custom, page both ways and open evidence detail. Ordinary scan results must
+- [ ] Fill Recon's eight-row window, choose every category filter from the
+  dropdown including Custom, dismiss it by tapping outside and with Back, page both ways and open evidence detail. Ordinary scan results must
   not fill that list; detail must remain a stable selected snapshot.
 - [ ] Raise `display_min` above a known match: it disappears from display but
   remains in the enabled-category native Recon log. Disable its category and

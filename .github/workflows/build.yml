@@ -47,6 +47,8 @@ jobs:
         run: python -m platformio run -e heltec-v4-r8-tft
       - name: Compile Cardputer ADV with Cap LoRa-1262
         run: python -m platformio run -e cardputer-adv-lora1262
+      - name: Compile Seeed Wio Tracker L2
+        run: python -m platformio run -e wio-tracker-l2
       - name: Fetch pinned portable Mbed TLS for messaging host tests
         shell: bash
         run: |

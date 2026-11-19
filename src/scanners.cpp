@@ -183,7 +183,7 @@ uint32_t chatDeadline=0,chatRetryAt=0,chatRequestedAt=0,chatNextTxAt=0;
 uint32_t chatAirtimeMs=0;
 uint32_t chatBudgetAt=0,chatBudgetDuration=0;
 bool chatBudgetArmed=false;
-#if !defined(LORA_TUNNEL_CARDPUTER_ADV)
+#if defined(LORA_TUNNEL_HAS_LORA_FEM)
 // Persistent table: GPIO5=CTX, GPIO2=CSD; SX1262 DIO2 controls CPS.
 Module::RfSwitchMode_t frontendModes[]={
   {Module::MODE_IDLE,{HIGH,LOW}}, {Module::MODE_RX,{HIGH,HIGH}},
@@ -280,7 +280,7 @@ bool applyRadioProfile(const lora_scan::Snapshot& profile,bool initialize) {
   return true;
 }
 void installTransmitSwitching() {
-#if !defined(LORA_TUNNEL_CARDPUTER_ADV)
+#if defined(LORA_TUNNEL_HAS_LORA_FEM)
   const uint32_t pins[]={board::FEM_CTX,board::FEM_ENABLE,RADIOLIB_NC,RADIOLIB_NC,RADIOLIB_NC};
   frontendModes[1].values[0]=config.lna?LOW:HIGH;
   radio.setRfSwitchTable(pins,frontendModes);

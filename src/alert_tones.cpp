@@ -28,6 +28,7 @@ const Pattern cues[]={
   CUE("biscuit:d=32,o=5,b=180:g,b,d6,g6,16d6,b,8g",55),
   CUE("custom:d=16,o=5,b=200:c,e,a,32p,8g",45)
 };
+const Pattern introCue=CUE("intro:d=16,o=6,b=180:e,g,8c7,32p",100);
 #undef CUE
 static_assert(sizeof(cues)/sizeof(*cues)==size_t(PatternId::Count),"Every cue needs a pattern");
 constexpr uint16_t frequencies[4][12]={
@@ -68,6 +69,7 @@ bool evidence(const recon::Result& result,const char* word) {
 const Pattern& pattern(PatternId id) {
   const auto index=size_t(id); return cues[index<size_t(PatternId::Count)?index:0];
 }
+const Pattern& intro() { return introCue; }
 PatternId patternFor(const recon::Result& result) {
   using recon::Category;
   switch(result.category) {
@@ -164,7 +166,7 @@ void Scheduler::setEnabled(bool enabled) {
 }
 void Scheduler::cancel() {
   if(active_ && output_) output_(0,0);
-  active_=sounding_=false; current_=PatternId::None; reader_=Reader{};
+  active_=sounding_=inIntro_=false; current_=PatternId::None; reader_=Reader{};
 }
 bool Scheduler::request(const recon::Result& result,uint32_t now) { return request(patternFor(result),now); }
 bool Scheduler::request(PatternId id,uint32_t now) {
@@ -172,9 +174,12 @@ bool Scheduler::request(PatternId id,uint32_t now) {
   tick(now);
   const auto& cue=pattern(id);
   if(active_ && cue.priority<=pattern(current_).priority) return false;
-  Reader next; Note first;
-  if(!next.begin(cue.text,cue.length) || !next.next(first)) return false;
-  cancel(); reader_=next; current_=id; active_=true; hardEnd_=now+MAX_PLAYBACK_MS;
+  Reader check, next; Note first;
+  // Validate the cue before committing to its intro.
+  if(!check.begin(cue.text,cue.length) || !check.next(first)) return false;
+  const auto& lead=intro();
+  if(!next.begin(lead.text,lead.length) || !next.next(first)) return false;
+  cancel(); reader_=next; current_=id; active_=true; inIntro_=true; hardEnd_=now+MAX_PLAYBACK_MS;
   startNote(first,now); return true;
 }
 void Scheduler::startNote(const Note& note,uint32_t now) {
@@ -189,7 +194,11 @@ void Scheduler::tick(uint32_t now) {
   if(sounding_ && due(now,gateEnd_)) { output_(0,0); sounding_=false; }
   if(!due(now,noteEnd_)) return;
   Note note;
-  if(!reader_.next(note)) { cancel(); return; }
+  if(!reader_.next(note)) {
+    const auto& cue=pattern(current_);
+    if(!inIntro_ || !reader_.begin(cue.text,cue.length) || !reader_.next(note)) { cancel(); return; }
+    inIntro_=false;
+  }
   // At most one next note per call; stalled ticks never replay a burst.
   startNote(note,now);
 }

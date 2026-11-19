@@ -18,6 +18,11 @@ struct Counters {std::atomic<unsigned> storage_errors{0},log_drops{0};} counters
 bool shutdownHadSession=false;unsigned shutdownAt=0,shutdownErrors=0,shutdownDrops=0;
 bool shutdownPending=false,quietActive=false,startAfterUpload=false,ready=true,stopping=false;
 bool configScratchStartup=false;
+bool captureStorageFailed=false;
+enum class MessageOwner {Off,Pausing,Active,Restoring,Fault};
+MessageOwner messageOwner=MessageOwner::Off;
+bool shutdownAfterMessages=false;unsigned messageStops=0;
+bool stopMessages(){++messageStops;return messageOwner==MessageOwner::Off;}
 bool uploadBusy=false,bleReady=true,storage=true,loggerFree=true,cancelled=false,acceptMarker=true;
 std::atomic<bool> capturing{false};std::atomic<unsigned> sessionId{0};unsigned totals[3]{},reconTotal=0;
 unsigned meshDecoded=0,meshUnknown=0,coverageReads=0;
@@ -57,7 +62,7 @@ void scannersStart(){++radioStarts;}
 #include "request_session_actual.inc"
 unsigned checks=0;
 void expect(bool condition,const char* message){++checks;if(!condition){std::cerr<<"FAIL "<<message<<"\n";std::exit(1);}}
-void reset(){configScratchStartup=false;alertPlayer.setEnabled(false);alertHistory.reset();alertHistoryNotice=false;lastAlert=0;sounding=toneStarts=toneStops=0;audioReady=config.buzzer=true;config.recon_alert_min=2;hostMillis=1000;queueAlertOnDrain=false;drainSilent=stopSilent=endCaptureSilent=true;model.notice[0]=0;shutdownHadSession=false;for(auto& s:summaries)s=Summary{};shutdownPending=quietActive=startAfterUpload=stopping=uploadBusy=cancelled=false;ready=bleReady=storage=loggerFree=acceptMarker=true;capturing=false;model.recon=false;starts=logged=radioStarts=drains=stops=fixReads=0;captureMode=CaptureMode::Wardriver;sessionId=0;lastMarker=Observation{};meshDecoded=meshUnknown=coverageReads=0;coverageFixture=lora_scan::Status{};}
+void reset(){configScratchStartup=false;captureStorageFailed=false;messageOwner=MessageOwner::Off;shutdownAfterMessages=false;messageStops=0;alertPlayer.setEnabled(false);alertHistory.reset();alertHistoryNotice=false;lastAlert=0;sounding=toneStarts=toneStops=0;audioReady=config.buzzer=true;config.recon_alert_min=2;hostMillis=1000;queueAlertOnDrain=false;drainSilent=stopSilent=endCaptureSilent=true;model.notice[0]=0;shutdownHadSession=false;for(auto& s:summaries)s=Summary{};shutdownPending=quietActive=startAfterUpload=stopping=uploadBusy=cancelled=false;ready=bleReady=storage=loggerFree=acceptMarker=true;capturing=false;model.recon=false;starts=logged=radioStarts=drains=stops=fixReads=0;captureMode=CaptureMode::Wardriver;sessionId=0;lastMarker=Observation{};meshDecoded=meshUnknown=coverageReads=0;coverageFixture=lora_scan::Status{};}
 Observation detection(unsigned identity=1) {
  Observation event;event.kind=Kind::Ble;event.mode=CaptureMode::Recon;
  std::snprintf(event.address,sizeof(event.address),"02:00:00:00:%02x:%02x",(identity>>8)&255,identity&255);
@@ -65,7 +70,7 @@ Observation detection(unsigned identity=1) {
  return event;
 }
 void beginRecon(){reset();model.recon=true;requestSession();expect(capturing&&captureMode==CaptureMode::Recon,"successful Recon starts for alert fixture");}
-void finishMotif(){hostMillis+=1500;serviceAlerts();}
+void finishMotif(){hostMillis+=alerts::MAX_PLAYBACK_MS+100;serviceAlerts();}
 void testAlerts(){
  beginRecon();const auto first=detection();emitDetectionAlert(first,true,hostMillis);
  expect(toneStarts==1&&alertPlayer.active()&&alertHistory.size()==1,"first eligible identity starts real motif and enters history");

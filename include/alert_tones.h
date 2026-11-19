@@ -15,8 +15,12 @@ struct Note { uint16_t frequency_hz=0, duration_ms=0; };
 constexpr uint16_t MAX_PATTERN_BYTES=192;
 constexpr uint8_t MAX_PATTERN_NOTES=24;
 constexpr uint16_t MAX_PATTERN_MS=1000;
-constexpr uint16_t MAX_PLAYBACK_MS=1200;
+constexpr uint16_t MAX_INTRO_MS=400;
+// Intro plus the longest cue, with margin for main-loop scheduling jitter.
+constexpr uint16_t MAX_PLAYBACK_MS=MAX_INTRO_MS+MAX_PATTERN_MS+200;
 const Pattern& pattern(PatternId id);
+// Shared rising intro played before every cue's own riff.
+const Pattern& intro();
 PatternId patternFor(const recon::Result& result);
 
 // Bounded RTTTL subset: name:d=1/2/4/8/16/32,o=4..7,b=60..240:notes.
@@ -55,7 +59,7 @@ private:
   Reader reader_;
   uint32_t noteEnd_=0, gateEnd_=0, hardEnd_=0;
   PatternId current_=PatternId::None;
-  bool enabled_=false, active_=false, sounding_=false;
+  bool enabled_=false, active_=false, sounding_=false, inIntro_=false;
 };
 
 // History is independent of the evicting display summary and mute state.

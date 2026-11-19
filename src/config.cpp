@@ -2,7 +2,8 @@
 #include "config_document.h"
 #include "credential_validation.h"
 #include <ArduinoJson.h>
-#include <SD.h>
+#include "board_config.h"
+#include "sd_card.h"
 #include <Preferences.h>
 #include <strings.h>
 #include <cmath>
@@ -85,12 +86,12 @@ struct ScopedConfigDocument {
   void* fileBuffer() { return nullptr; }
 };
 using ConfigFile=File;
-bool exists(const char* filename) { return SD.exists(filename); }
-bool removeFile(const char* filename) { return SD.remove(filename); }
-bool renameFile(const char* from,const char* to) { return SD.rename(from,to); }
-bool makeDirectory() { SD.mkdir("/lora-tunnel");return true; }
+bool exists(const char* filename) { return sdCard().exists(filename); }
+bool removeFile(const char* filename) { return sdCard().remove(filename); }
+bool renameFile(const char* from,const char* to) { return sdCard().rename(from,to); }
+bool makeDirectory() { sdCard().mkdir("/lora-tunnel");return true; }
 bool openFile(ConfigFile& file,const char* filename,bool write,void*) {
-  file=SD.open(filename,write?FILE_WRITE:FILE_READ);return bool(file);
+  file=sdCard().open(filename,write?FILE_WRITE:FILE_READ);return bool(file);
 }
 bool closeFile(ConfigFile& file) { const bool ok=!file.getWriteError();file.close();return ok; }
 #endif
@@ -314,8 +315,8 @@ bool loadConfig() {
     messaging::parseSettings(document.as<JsonVariantConst>(),config.messages);
     auto radio = document["lora"];
     config.lna = radio["lna"] | false;
-#if defined(LORA_TUNNEL_CARDPUTER_ADV)
-    config.lna=false; // U214 has no selectable Heltec FEM/LNA.
+#if !defined(LORA_TUNNEL_HAS_LORA_FEM)
+    config.lna=false; // Only Heltec Expansion V2 has a selectable FEM/LNA.
 #endif
     parseMeshKeys(radio,config.mesh_keys,config.mesh_key_count,config.decode_public);
     parseMeshCoreKeys(radio,config.meshcore_keys,config.meshcore_key_count);

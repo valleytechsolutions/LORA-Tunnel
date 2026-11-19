@@ -13,7 +13,7 @@ from check_lora_hopping import extract
 
 def check():
     source = (ROOT / "src/scanners.cpp").read_text(encoding="utf-8")
-    actual = "#if !defined(LORA_TUNNEL_CARDPUTER_ADV)\n"
+    actual = "#include \"board_config.h\"\n#if defined(LORA_TUNNEL_HAS_LORA_FEM)\n"
     actual += extract(source, "Module::RfSwitchMode_t frontendModes[]=") + ";\n#endif\n"
     actual += extract(source, "struct RadioBusLock {") + ";\n"
     for signature in ["void accountRadioListen()", "void stopRadioListen()", "int armRadioReceive()",

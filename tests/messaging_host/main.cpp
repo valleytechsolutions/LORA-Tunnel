@@ -229,7 +229,7 @@ static mc::Frame groupRoute(const std::uint8_t* bytes,std::size_t length){
 }
 static void meshcoreDistinctGroupMessages(){
   scenario="MC same claimed name and timestamp are not a sender ID";reset();REQUIRE(start(Protocol::MeshCore));
-  CHECK(chat::workspaceBytes()==3424);const auto initialWrites=saveCalls;
+  CHECK(chat::workspaceBytes()==3464);const auto initialWrites=saveCalls;
   mc::Frame first,second;CHECK(mc::groupText(mc::publicGroupKey(),16,"LORA Tunnel","peer one",Epoch,0,mc::platformCrypto(),first));
   CHECK(mc::groupText(mc::publicGroupKey(),16,"LORA Tunnel","peer two",Epoch,0,mc::platformCrypto(),second));
   chat::receive(first.bytes,first.length,1000,Epoch);CHECK(view().history_count==1);
@@ -283,7 +283,7 @@ static void meshcoreGroupCacheRollover(){
   }
   CHECK(view().history_count==chat::HistoryCount);const auto received=chat::diagnostics().rx_text;
   auto routed=groupRoute(last.bytes,last.length);chat::receive(routed.bytes,routed.length,2000,Epoch);
-  CHECK(chat::diagnostics().rx_text==received);CHECK(saveCalls==writes);CHECK(chat::workspaceBytes()==3424);
+  CHECK(chat::diagnostics().rx_text==received);CHECK(saveCalls==writes);CHECK(chat::workspaceBytes()==3464);
   // Old entries can reappear after finite-cache eviction; this is duplicate
   // suppression, not authenticated or persistent anti-replay protection.
   chat::receive(first.bytes,first.length,3000,Epoch);CHECK(chat::diagnostics().rx_text==received+1);

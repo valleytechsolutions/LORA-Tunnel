@@ -56,8 +56,11 @@ Recon runs passive Wi-Fi/BLE observation with category classification. LoRa
 reception is stopped in this mode. Ordinary unclassified scans do not fill the
 Recon result list.
 
-- **FILTER** cycles All, ALPR, Flock, Bodycam, iBeacon, Ring, Cameras, Drones,
-  Find My, Trackers, Glasses, Acoustic, Serial, Radio Tools and Custom.
+- **FILTER** opens a dropdown listing All, ALPR, Flock, Bodycam, iBeacon, Ring,
+  Cameras, Drones, Find My, Trackers, Glasses, Acoustic, Serial, Radio Tools and
+  Custom, with the current choice highlighted. Tap a category to apply it; tap
+  elsewhere or press Back to close without changing it. With physical buttons,
+  focus starts on the current category.
 - The result area holds the latest **eight eligible matched summaries**, shown
   two per page. **< / >** move through this bounded recent window. A filter only
   searches that window; it is not a search of the full SD session.

@@ -67,7 +67,7 @@ Recon uses passive Wi-Fi/BLE observations and stops LoRa. Only enabled-category 
 
 *Both views are code renders with synthetic sample values. They do not demonstrate detection of those devices.*
 
-**FILTER** cycles categories. The list retains up to eight eligible recent summaries and shows two per page; arrows page through that window. Filters do not search the entire session file. Tap a result for a stable evidence snapshot.
+**FILTER** opens a dropdown of categories; tap one to apply it, or tap elsewhere to close. The list retains up to eight eligible recent summaries and shows two per page; arrows page through that window. Filters do not search the entire session file. Tap a result for a stable evidence snapshot.
 
 Evidence grades are **weak indicator**, **medium evidence** and **strong signature**. They describe matched broadcast evidence, not probabilities, authenticated identities or recording activity. A vendor prefix may cover several product families. An Apple manufacturer identifier alone does not establish an AirTag. Remote ID positions are self-reported, separate from receiver GPS, and do not prove the operator's current location. [Detection rules, provenance and limits](RECON.md).
 

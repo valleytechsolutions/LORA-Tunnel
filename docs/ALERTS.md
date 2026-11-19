@@ -32,9 +32,16 @@ choice, not a threat score or stronger evidence of identity.
 ## Original sound palette
 
 These are newly composed, short retro game-style riffs and electronic chirps,
-not transcriptions of game or movie melodies. Each is under one second of
-nominal note time, with a 1.2-second scheduler cutoff for delayed loop ticks.
-Pauses and brief gaps between notes keep individual cues distinct.
+not transcriptions of game or movie melodies. Every alert opens with the same
+tiny rising intro (E6, G6, C7; under 0.4 seconds) and then plays the cue's own
+riff. Each riff is under one second of nominal note time, with a 1.6-second
+scheduler cutoff covering the intro, the riff and delayed loop ticks. Pauses and
+brief gaps between notes keep individual cues distinct.
+
+On the Wio Tracker L2, notes play through the ES8311 codec with a soft chime
+envelope. **Settings → Alert volume** cycles 25/50/75/100 percent (default 75),
+plays a short preview and keeps the level across reboots. Heltec's piezo and
+Cardputer have no volume setting.
 
 | Existing classification | Cue character |
 | --- | --- |

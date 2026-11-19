@@ -114,13 +114,29 @@ void test_each_motif_finishes_once_and_never_loops() {
   for(unsigned id=1;id<unsigned(PatternId::Count);++id) {
     pulseCount=0; Scheduler player(sink); player.setEnabled(true);
     TEST_ASSERT_TRUE(player.request(PatternId(id),100));
-    for(uint32_t now=101;now<=1300;++now) player.tick(now);
+    for(uint32_t now=101;now<=100+MAX_PLAYBACK_MS+100;++now) player.tick(now);
     TEST_ASSERT_FALSE(player.active());
     const size_t emitted=pulseCount,notes=sounds(); TEST_ASSERT_TRUE(notes>=3);
     TEST_ASSERT_EQUAL_UINT16(0,pulses[pulseCount-1].hz);
     player.tick(20000); player.tick(30000);
     TEST_ASSERT_EQUAL_UINT(emitted,pulseCount);
     for(size_t i=0;i<pulseCount;++i) if(pulses[i].hz) TEST_ASSERT_TRUE(pulses[i].duration>0 && pulses[i].duration<=MAX_PATTERN_MS);
+  }
+}
+void test_every_cue_starts_with_the_shared_intro_then_its_riff() {
+  Reader lead; Note note; const auto& in=intro();
+  TEST_ASSERT_TRUE(lead.begin(in.text,in.length)); TEST_ASSERT_TRUE(lead.durationMs()<=MAX_INTRO_MS);
+  for(unsigned id=1;id<unsigned(PatternId::Count);++id) {
+    pulseCount=0; Scheduler player(sink); player.setEnabled(true);
+    TEST_ASSERT_TRUE(player.request(PatternId(id),0));
+    for(uint32_t now=1;now<=MAX_PLAYBACK_MS+100;++now) player.tick(now);
+    uint16_t expected[MAX_PATTERN_NOTES*2]; size_t count=0;
+    lead.begin(in.text,in.length); while(lead.next(note)) if(note.frequency_hz) expected[count++]=note.frequency_hz;
+    Reader cue; TEST_ASSERT_TRUE(cue.begin(pattern(PatternId(id)).text,pattern(PatternId(id)).length));
+    while(cue.next(note)) if(note.frequency_hz) expected[count++]=note.frequency_hz;
+    size_t played=0;
+    for(size_t i=0;i<pulseCount;++i) if(pulses[i].hz) { TEST_ASSERT_TRUE(played<count); TEST_ASSERT_EQUAL_UINT16(expected[played++],pulses[i].hz); }
+    TEST_ASSERT_EQUAL_UINT(count,played);
   }
 }
 void test_priority_preemption_has_no_queue_or_replay() {
@@ -132,7 +148,7 @@ void test_priority_preemption_has_no_queue_or_replay() {
   TEST_ASSERT_EQUAL_UINT16(0,pulses[before].hz);
   TEST_ASSERT_EQUAL_UINT8(unsigned(PatternId::Axon),unsigned(player.current()));
   TEST_ASSERT_FALSE(player.request(PatternId::IBeacon,13));
-  for(uint32_t now=14;now<1500;++now) player.tick(now);
+  for(uint32_t now=14;now<14+MAX_PLAYBACK_MS+100;++now) player.tick(now);
   const auto after=pulseCount; player.tick(10000); TEST_ASSERT_EQUAL_UINT(after,pulseCount);
 }
 void test_mute_cancel_and_unmute_do_not_resume_a_motif() {
@@ -151,7 +167,7 @@ void test_deadlines_survive_wrap_and_stalled_ticks_never_burst() {
   TEST_ASSERT_FALSE(player.active());
   TEST_ASSERT_TRUE(player.request(PatternId::Alpr,2000)); const auto before=pulseCount;
   player.tick(3100); TEST_ASSERT_TRUE(pulseCount<=before+2); // one silence + one next note
-  player.tick(3200); TEST_ASSERT_FALSE(player.active());
+  player.tick(2000+MAX_PLAYBACK_MS); TEST_ASSERT_FALSE(player.active());
   const auto stopped=pulseCount; player.tick(100000); TEST_ASSERT_EQUAL_UINT(stopped,pulseCount);
 }
 void test_history_normalizes_address_but_distinguishes_radio_and_address_type() {
@@ -218,6 +234,7 @@ int main(int,char**) {
  RUN_TEST(test_mapping_covers_categories_and_uses_only_supported_classification_evidence);
  RUN_TEST(test_disabled_scheduler_and_missing_sink_cannot_start);
  RUN_TEST(test_each_motif_finishes_once_and_never_loops);
+ RUN_TEST(test_every_cue_starts_with_the_shared_intro_then_its_riff);
  RUN_TEST(test_priority_preemption_has_no_queue_or_replay);
  RUN_TEST(test_mute_cancel_and_unmute_do_not_resume_a_motif);
  RUN_TEST(test_deadlines_survive_wrap_and_stalled_ticks_never_burst);

@@ -24,8 +24,9 @@ Combined wardriving uses one selected profile per protocol and a default 30-seco
 | --- | --- | --- |
 | Heltec | [WiFi LoRa 32 Expansion Kit V2 / V4-R8](https://heltec.org/project/v4-r8-ex/), 863–928 MHz variant | 240 × 320 touchscreen, 16 MB flash, 8 MB PSRAM, onboard GNSS and microSD |
 | Cardputer | [Cardputer ADV](https://docs.m5stack.com/en/core/Cardputer-Adv) with [Cap LoRa-1262, U214](https://docs.m5stack.com/en/cap/Cap_LoRa-1262), 868–923 MHz | 240 × 135 display, physical keyboard, 8 MB flash, no PSRAM; cap supplies LoRa and GNSS |
+| Wio Tracker L2 (source build, untested on hardware) | Seeed Wio Tracker L2 | 320 × 240 touchscreen, landscape or portrait; 16 MB flash, 8 MB PSRAM, L76K GNSS, microSD |
 
-The Heltec V1, low-band Heltec kits, original Cardputer and other M5Stack caps are separate hardware. Check the board and fitted radio before installing. [Heltec hardware notes](docs/HARDWARE.md) · [Cardputer setup](docs/CARDPUTER_ADV.md).
+The Heltec V1, low-band Heltec kits, original Cardputer and other M5Stack caps are separate hardware. Check the board and fitted radio before installing. [Heltec hardware notes](docs/HARDWARE.md) · [Cardputer setup](docs/CARDPUTER_ADV.md) · [Wio Tracker L2 notes](docs/WIO_TRACKER_L2.md).
 
 ## Wardriver and Recon
 
@@ -79,6 +80,7 @@ Use Python 3.10 or newer and PlatformIO Core 6.2.0. The platform and libraries a
 python -m pip install platformio==6.2.0
 python -m platformio run -e heltec-v4-r8-tft
 python -m platformio run -e cardputer-adv-lora1262
+python -m platformio run -e wio-tracker-l2
 ```
 
 Select the actual USB port before upload. Keep firmware, partition table and bootloader from the same build. The Heltec test unit requires the documented [esptool 5.4.0 legacy-stub fallback](docs/RECOVERY.md#legacy-stub-installation-fallback) when the default loader fails. A successful build is distinct from a verified flash and a successful radio capture.

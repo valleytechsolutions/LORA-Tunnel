@@ -7,7 +7,7 @@
 #include "ble_ad_summary.h"
 #include "resource_memory.h"
 #include "checked_sd_file.h"
-#include <SD.h>
+#include "sd_card.h"
 #include <ArduinoJson.h>
 #include <esp_heap_caps.h>
 #include <cmath>
@@ -352,12 +352,18 @@ void task(void*) {
 }
 bool mountStorage() {
   // Call only before tasks start, or while stopped and loggerIdle().
-  SD.end();
-  const bool ok=SD.begin(board::SD_CS,hw::peripheralSpi(),board::SD_SPI_HZ,"/sd",SD_FILE_SLOTS);
+  sdCard().end();
+#if defined(LORA_TUNNEL_WIO_TRACKER_L2)
+  const bool ok=hw::setSdPower(true) &&
+      sdCard().setPins(board::SD_CLK,board::SD_CMD,board::SD_D0) &&
+      sdCard().begin("/sd",true,false,SDMMC_FREQ_DEFAULT,SD_FILE_SLOTS);
+#else
+  const bool ok=sdCard().begin(board::SD_CS,hw::peripheralSpi(),board::SD_SPI_HZ,"/sd",SD_FILE_SLOTS);
+#endif
   mounted=false;
   if(!ok)noteFailure(LoggerFailureReason::Mount);
-  else if(SD.cardType()==CARD_NONE)noteFailure(LoggerFailureReason::MissingCard);
-  else if(!SD.mkdir("/sessions"))noteFailure(LoggerFailureReason::SessionsDirectory);
+  else if(sdCard().cardType()==CARD_NONE)noteFailure(LoggerFailureReason::MissingCard);
+  else if(!sdCard().mkdir("/sessions"))noteFailure(LoggerFailureReason::SessionsDirectory);
   else mounted=true;
   if (!mounted) ++counters.storage_errors;
   return mounted;
@@ -428,7 +434,7 @@ bool loggerMaintenanceQuiescent() {
 }
 bool unmountStorageForSleep() {
   if(!loggerIdle()) return false;
-  SD.end(); mounted=false;
+  sdCard().end(); mounted=false;
   return true;
 }
 }

@@ -2,7 +2,7 @@
 #include "board_config.h"
 #include "button_input.h"
 
-#if !defined(LORA_TUNNEL_CARDPUTER_ADV)
+#if !defined(LORA_TUNNEL_CARDPUTER_ADV) && !defined(LORA_TUNNEL_WIO_TRACKER_L2)
 #include <Wire.h>
 #include <driver/gpio.h>
 #include <driver/rtc_io.h>
