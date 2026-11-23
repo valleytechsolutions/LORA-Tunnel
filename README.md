@@ -6,7 +6,9 @@ LORA Tunnel turns a supported handheld into a standalone Wi-Fi, Bluetooth Low En
 
 The firmware runs on **Heltec WiFi LoRa 32 Expansion Kit V2 / V4-R8** and **M5Stack Cardputer ADV with Cap LoRa-1262 (U214)**. Each board has its own binary. Capture runs on the handheld without a laptop, phone or Kismet server.
 
-**M5Stack CardputerZero:** an all-in-one LoRa, Wi-Fi and BLE wardriver app for the CardputerZero with the Cap LoRa-1262 lives in [`cardputer-zero/`](cardputer-zero/README.md). It does full Meshtastic and MeshCore decoding, WiGLE-ready Wi-Fi/BLE logging, Recon and messaging. Install it from the CardputerZero App Store (share code **LORA**), or with one command on the device:
+<p align="center"><img src="assets/lora-tunnel-radio-logo.png" width="120" alt="LORA Tunnel"></p>
+
+**M5Stack CardputerZero:** LORA Tunnel is in the **CardputerZero App Store**. Open Store, press 5 and enter share code **LORA**. It's an all-in-one LoRa, Wi-Fi and BLE wardriver for the CardputerZero with the Cap LoRa-1262, with full Meshtastic and MeshCore decoding, WiGLE-ready Wi-Fi/BLE logging, Recon and messaging. The source and docs are in [`cardputer-zero/`](cardputer-zero/README.md). You can also install it with one command on the device:
 
 ```sh
 curl -fL -o /tmp/lora-tunnel.deb https://github.com/valleytechsolutions/LORA-Tunnel/releases/download/cardputer-zero-v1.2.0/lora-tunnel-cardputer-zero.deb && sudo apt install -y /tmp/lora-tunnel.deb && sudo reboot

@@ -14,11 +14,12 @@ import time
 HERE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(HERE))
 
-from lora_tunnel_zero import config as configuration  # noqa: E402
+from lora_tunnel_zero import __version__, config as configuration  # noqa: E402
 from lora_tunnel_zero.demo import DemoBle, DemoRadio, DemoWifi  # noqa: E402
 from lora_tunnel_zero.recon_scan import Recon  # noqa: E402
 from lora_tunnel_zero.engine import Engine  # noqa: E402
 from lora_tunnel_zero.gnss import GPS  # noqa: E402
+from lora_tunnel_zero.updates import UpdateChecker  # noqa: E402
 from lora_tunnel_zero.ui import recon_screens, screens  # noqa: E402
 from lora_tunnel_zero.ui.app import App  # noqa: E402
 from lora_tunnel_zero.ui.display import PNGDisplay  # noqa: E402
@@ -121,6 +122,18 @@ def main():
         "LoRa region", [(c, r.label, c) for c, r in list(__import__("lora_tunnel_zero.profiles",
                                                                      fromlist=["REGIONS"]).REGIONS.items())[:8]],
         "US"))
+    current = __version__
+
+    def offline_fetch(url, timeout=8.0, no_cache=False):
+        if "registry" in url:
+            return {"apps": [{"share_code": "LORA", "version": current, "download": {"package": "lora-tunnel"}}]}
+        return [{"tag_name": "cardputer-zero-v" + current, "draft": False, "prerelease": False}]
+    app.updates = UpdateChecker(offline_fetch)
+    app.updates.start()
+    app.updates.wait(5)
+    updates_screen = screens.Updates()
+    updates_screen.started = True
+    shot("updates", updates_screen)
     shot("about", screens.About())
     shot("help", screens.Help())
     (out / "_frame.png").unlink(missing_ok=True)

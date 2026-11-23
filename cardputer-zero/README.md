@@ -1,4 +1,18 @@
-# LORA Tunnel for M5Stack CardputerZero
+<p align="center">
+  <img src="../assets/lora-tunnel-radio-logo.png" width="200" alt="LORA Tunnel">
+</p>
+
+<h1 align="center">LORA Tunnel for M5Stack CardputerZero</h1>
+
+<p align="center">
+  <b>Now in the CardputerZero App Store: open Store, press 5 and enter share code <code>LORA</code></b><br>
+  All-in-one LoRa, Wi-Fi and Bluetooth wardriver · MIT open source
+</p>
+
+<p align="center">
+  <a href="https://valleytechsolutions.tech"><img src="../assets/vts-badge.png" width="56" alt="Valleytech Solutions"></a><br>
+  <sub>Made by Valleytech Solutions</sub>
+</p>
 
 LORA Tunnel turns the **M5Stack CardputerZero** and the **Cap LoRa-1262 (U214)** into an all-in-one LoRa, Wi-Fi and Bluetooth wardriver. One press of Space and it:
 
@@ -8,7 +22,7 @@ LORA Tunnel turns the **M5Stack CardputerZero** and the **Cap LoRa-1262 (U214)**
 
 It can also chat on Meshtastic and MeshCore channels. Every LoRa frame is saved with its raw bytes, exact radio settings and your GPS position.
 
-It runs as an APPLaunch app from the CardputerZero store or as a `.deb` you install yourself. It's the CardputerZero member of the LORA Tunnel family, next to the ESP32 firmware for the Cardputer ADV and Heltec V4 in this repository.
+It runs as an APPLaunch app from the CardputerZero App Store, or as a `.deb` you install yourself. It's the CardputerZero member of the LORA Tunnel family, next to the ESP32 firmware for the Cardputer ADV and Heltec V4 in this repository.
 
 | Wardrive (LoRa + Wi-Fi + BLE) | Recon | Messages |
 | --- | --- | --- |
@@ -19,6 +33,8 @@ It runs as an APPLaunch app from the CardputerZero store or as a `.deb` you inst
 | ![Home](screenshots/home@2x.png) | ![Recon device](screenshots/recon-detail@2x.png) | ![Finder](screenshots/recon-finder@2x.png) |
 | **Nodes** | **Packet detail** | **Write a message** |
 | ![Nodes](screenshots/nodes@2x.png) | ![Packet](screenshots/packet-detail@2x.png) | ![Compose](screenshots/compose@2x.png) |
+| **Check for updates** | **Sessions** | **About** |
+| ![Check for updates](screenshots/updates@2x.png) | ![Sessions](screenshots/sessions@2x.png) | ![About](screenshots/about@2x.png) |
 
 The screenshots are rendered from the app's own drawing code with its synthetic demo receiver and scanners. They aren't photos of real traffic or real devices.
 
@@ -103,7 +119,11 @@ Power the CardputerZero off, fit the Cap LoRa-1262, and power it back on. The ca
 
 ### 1. From the App Store (easiest)
 
-Open the **App Store** on the CardputerZero, enter share code **LORA**, and install. *(Once the store listing is live.)*
+1. Open **Store** on the CardputerZero (it needs Wi-Fi).
+2. Press **5** and enter share code **LORA**. LORA Tunnel is also listed under **Radio & Comms** and **Security**.
+3. Press **7** to install, then open **LORA Tunnel** from the Home screen.
+
+Updates come through the Store too: it marks LORA Tunnel when a new version is out, and **7** updates it.
 
 ### 2. One command on the device
 
