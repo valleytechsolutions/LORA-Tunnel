@@ -1,4 +1,4 @@
-# LORA Tunnel for CardputerZero 1.2.0
+# LORA Tunnel for CardputerZero 1.3.0
 
 LORA Tunnel turns the M5Stack CardputerZero with the Cap LoRa-1262 into an all-in-one LoRa, Wi-Fi and Bluetooth wardriver. MIT open source.
 
@@ -7,10 +7,18 @@ LORA Tunnel turns the M5Stack CardputerZero with the Cap LoRa-1262 into an all-i
 On the CardputerZero, connected to Wi-Fi, run this in a terminal or over SSH:
 
 ```sh
-curl -fL -o /tmp/lora-tunnel.deb https://github.com/valleytechsolutions/LORA-Tunnel/releases/download/cardputer-zero-v1.2.0/lora-tunnel-cardputer-zero.deb && sudo apt install -y /tmp/lora-tunnel.deb && sudo reboot
+curl -fL -o /tmp/lora-tunnel.deb https://github.com/valleytechsolutions/LORA-Tunnel/releases/download/cardputer-zero-v1.3.0/lora-tunnel-cardputer-zero.deb && sudo apt install -y /tmp/lora-tunnel.deb && sudo reboot
 ```
 
 It installs next to your other apps and replaces nothing. After the reboot, open **LORA Tunnel** in APPLaunch and pick your region. If Bluetooth reports it's switched off, run `sudo rfkill unblock bluetooth` once.
+
+## New in 1.3.0
+
+- **Recon knows more:** dashcams and fleet cameras, in-car fleet routers, Sonos speakers, the Flipper Devices Bluetooth ID, the Dragon Detector fox beacon, and whether an AirTag or other Find My accessory is away from its owner.
+- **Evil twins:** an open Wi-Fi network using the name of a protected one nearby is flagged, with the network it copies.
+- **BLE advert bursts:** a sudden flood of new Apple pop-up, Fast Pair, Swift Pair or tracker adverts is flagged once, as one entry, instead of filling the list.
+- Fleet routers, smart speakers and the fox beacon start off in **Settings → Recon → Categories**. Evil twins and advert bursts start on, also for people updating from an older version.
+- The new rules come from Dragon Detector and the public IEEE and Bluetooth registries. LORA Tunnel stays MIT.
 
 ## New in 1.2.0
 

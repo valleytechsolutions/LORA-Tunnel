@@ -18,6 +18,7 @@ import tempfile
 import threading
 import time
 import wave
+import zlib
 
 from . import recon
 from .store import MIN_FREE_BYTES, atomic_json, create_session, read_metadata
@@ -29,6 +30,10 @@ ALERT_REPEAT = 300.0
 FOLLOW_MIN_SECONDS = 600
 FOLLOW_MIN_METERS = 800
 MAX_DEVICES = 2000
+TWIN_HITS, TWIN_RECENT, TWIN_HOLD, TWIN_QUIET = 2, 20.0, 120.0, 1800.0
+BURST_WINDOW, BURST_ADDRESSES, BURST_VARIANTS, BURST_QUIET = 5.0, 12, 24, 600.0
+BURST_NAMES = {"apple": "Apple pop-up adverts", "fastpair": "Google Fast Pair adverts",
+               "swiftpair": "Microsoft Swift Pair adverts", "tracker": "Tracker adverts"}
 
 
 class ReconUnavailable(RuntimeError):
@@ -403,6 +408,96 @@ class AlertSound:
             return False
 
 
+# ------------------------------------------------------------------ incidents
+def is_open(security):
+    return str(security or "open").strip().lower() in ("open", "", "--", "none")
+
+
+class SsidConflicts:
+    """The same network name heard both open and protected at the same time: a possible evil twin.
+
+    Several access points sharing one name is normal, and WPA2/WPA3 mixes are normal too, so only an
+    open copy of a protected network counts, and only once both have been heard on more than one scan.
+    """
+
+    def __init__(self, limit=512):
+        self.limit = limit
+        self.aps = {}
+        self.flagged = {}
+        self.quiet = {}
+
+    def observe(self, item, now):
+        """Returns (open bssid, protected bssid) when this sighting starts a new conflict, else None."""
+        bssid, ssid = item.get("bssid", ""), item.get("ssid", "")
+        if not ssid or not bssid or int(bssid[:2], 16) & 1:
+            return None
+        state = (ssid, is_open(item.get("security")))
+        ap = self.aps.get(bssid)
+        if ap is None or ap["state"] != state or now - ap["last"] > 30:
+            if ap is None and len(self.aps) >= self.limit:
+                del self.aps[min(self.aps, key=lambda k: self.aps[k]["last"])]
+            ap = self.aps[bssid] = {"state": state, "hits": 0, "first": now, "last": now}
+        ap["hits"] += 1
+        ap["last"] = now
+        if ap["hits"] < TWIN_HITS:
+            return None
+        for other, peer in self.aps.items():
+            if other == bssid or peer["hits"] < TWIN_HITS or now - peer["last"] > TWIN_RECENT:
+                continue
+            if peer["state"][0] != ssid or peer["state"][1] == state[1]:
+                continue
+            pair = (bssid, other) if state[1] else (other, bssid)
+            fresh = pair[0] not in self.flagged or now - self.flagged[pair[0]][1] > TWIN_HOLD
+            self.flagged[pair[0]] = (pair[1], now)
+            if fresh and now - self.quiet.get(pair, -TWIN_QUIET) >= TWIN_QUIET:
+                self.quiet[pair] = now
+                return pair
+        return None
+
+    def peer(self, bssid, now):
+        """The protected network an open AP is copying, while the conflict is current."""
+        flagged = self.flagged.get(bssid)
+        if flagged and now - flagged[1] <= TWIN_HOLD:
+            return flagged[0]
+        return None
+
+
+class AdvertBursts:
+    """Many new BLE addresses or payloads of one pairing kind within seconds: possible advert spam.
+
+    BlueZ keeps reporting a device for a while after its last advert, so an address and payload only
+    count the first time they appear, not each time the cache is read.
+    """
+
+    def __init__(self, memory=120.0, limit=8192):
+        self.memory = memory
+        self.limit = limit
+        self.known = {}
+        self.recent = {}
+        self.alerted = {}
+
+    def observe(self, group, address, fingerprint, now):
+        """Returns (addresses, variants) when the group crosses a threshold and may alert, else None."""
+        entries = self.recent.setdefault(group, {})
+        for key in [k for k, at in entries.items() if now - at > BURST_WINDOW]:
+            del entries[key]
+        known = (group, address, fingerprint)
+        last = self.known.get(known)
+        self.known[known] = now
+        if last is not None and now - last <= self.memory:
+            return None
+        if len(self.known) > self.limit:
+            self.known = {k: at for k, at in self.known.items() if now - at <= self.memory}
+        entries[(address, fingerprint)] = now
+        addresses = len({a for a, _ in entries})
+        variants = len({f for _, f in entries})
+        churn = group != "tracker" and variants >= BURST_VARIANTS
+        if (addresses >= BURST_ADDRESSES or churn) and now - self.alerted.get(group, -BURST_QUIET) >= BURST_QUIET:
+            self.alerted[group] = now
+            return addresses, variants
+        return None
+
+
 # ------------------------------------------------------------------ engine
 def _distance(a, b):
     lat1, lon1, lat2, lon2 = map(math.radians, (a[0], a[1], b[0], b[1]))
@@ -435,6 +530,8 @@ class Recon:
         self._wigle = None
         self._cache = {}
         self._seen = set()
+        self._ssids = SsidConflicts()
+        self._bursts = AdvertBursts()
         self.totals = {"wifi": 0, "ble": 0}
 
     # -- configuration -------------------------------------------------
@@ -457,6 +554,8 @@ class Recon:
         self.totals = {"wifi": 0, "ble": 0}
         self.alerts.clear()
         self._cache.clear()
+        self._ssids = SsidConflicts()
+        self._bursts = AdvertBursts()
         self.unseen_alerts = 0
         self.counters = dict(wifi_scans=0, ble_scans=0, observations=0, classified=0, alerts=0, log_errors=0,
                              wigle_rows=0)
@@ -563,10 +662,72 @@ class Recon:
             self._cache[key] = recon.classify_ble(item["address"], item.get("address_type", 1), ad)
         return self._cache[key]
 
+    def _twin(self, item, result, now):
+        self._ssids.observe(item, now)
+        peer = self._ssids.peer(item["bssid"], now)
+        if peer is None or not self.enabled("eviltwin") or result.get("confidence", recon.NONE) >= recon.MEDIUM:
+            return result
+        return {"category": "eviltwin", "label": recon.CATEGORY_LABELS["eviltwin"], "confidence": recon.MEDIUM,
+                "confidence_name": recon.CONFIDENCE_NAMES[recon.MEDIUM], "vendor": "", "payload_valid": True,
+                "evidence": "Open copy of protected network %s with the same name; possible evil twin or guest "
+                            "network" % peer, "peer": peer}
+
+    def _check_bursts(self, item, result, now):
+        groups = list(result.get("groups", ()))
+        if result.get("category") in ("airtag", "tracker", "ibeacon"):
+            groups.append("tracker")
+        if not groups:
+            return
+        ad = item.get("raw_ad") or recon.advertisement_from_properties(
+            item.get("name"), item.get("uuids", ()), item.get("manufacturer"), item.get("service_data"))
+        fingerprint = zlib.crc32(ad)
+        for group in groups:
+            hit = self._bursts.observe(group, item["address"], fingerprint, now)
+            if hit:
+                self._burst_incident(group, hit, item.get("rssi"), now)
+
+    def _burst_incident(self, group, counts, rssi, now):
+        if not self.enabled("burst"):
+            return
+        key = ("ble", "BURST " + group.upper())
+        evidence = "%d new addresses, %d payloads in %d s; possible advert spam, sender unproven" % (
+            counts[0], counts[1], BURST_WINDOW)
+        alert = None
+        with self.lock:
+            device = self.devices.get(key)
+            if device is None:
+                device = self.devices[key] = {"transport": "ble", "address": key[1], "first_seen": now, "count": 0,
+                                              "best_rssi": rssi, "rssi_history": deque(maxlen=60), "places": [],
+                                              "alerted_at": 0.0, "logged_at": 0.0, "wigle_at": 0.0,
+                                              "follow": False, "incident": group}
+            device.update(category="burst", confidence=recon.MEDIUM, raw_category="burst", last_seen=now,
+                          rssi=rssi, name=BURST_NAMES[group], label=recon.CATEGORY_LABELS["burst"],
+                          evidence=evidence, vendor="")
+            device["count"] += 1
+            device["rssi_history"].append((now, rssi))
+            self.counters["classified"] += 1
+            if recon.MEDIUM >= self.alert_min():
+                device["alerted_at"] = now
+                alert = {"time": now, "transport": "ble", "address": key[1], "category": "burst",
+                         "label": recon.CATEGORY_LABELS["burst"], "confidence": recon.MEDIUM, "evidence": evidence,
+                         "rssi": rssi, "name": BURST_NAMES[group], "follow": False}
+                self.alerts.appendleft(alert)
+                self.unseen_alerts += 1
+                self.counters["alerts"] += 1
+            self._write({"timestamp": now, "transport": "ble", "incident": "burst", "group": group,
+                         "addresses": counts[0], "variants": counts[1], "rssi_dbm": rssi,
+                         "receiver_gps": self.gps.snapshot(), "alert": bool(alert)})
+        if alert and self.cfg.get("recon_sound", True):
+            self.sound.play()
+
     def observe(self, transport, item, now=None):
         now = time.time() if now is None else now
         address = item["bssid"] if transport == "wifi" else item["address"]
         result = self.classify(transport, item)
+        if transport == "wifi":
+            result = self._twin(item, result, now)
+        else:
+            self._check_bursts(item, result, now)
         category = result.get("category")
         shown = bool(category) and self.enabled(category) and result["confidence"] >= self.display_min()
         gps = self.gps.snapshot()
@@ -600,7 +761,7 @@ class Recon:
             device["category"] = category if shown else None
             device["confidence"] = result["confidence"] if shown else 0
             device["raw_category"] = category
-            for field in ("label", "evidence", "vendor", "remote_id", "beacon"):
+            for field in ("label", "evidence", "vendor", "remote_id", "beacon", "owner", "peer"):
                 if result.get(field):
                     device[field] = result[field]
             if isinstance(rssi, (int, float)) and (device["best_rssi"] is None or rssi > device["best_rssi"]):

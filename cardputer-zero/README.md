@@ -80,9 +80,11 @@ Transmit is **off by default**. The first time you send, the app asks you to tur
 
 ## Recon
 
-Recon is the counter-surveillance mode from the Cardputer ADV firmware. It uses the same rules as that firmware's `lib/recon` classifier, and CI checks that both give the same answer on over 60,000 real and mutated frames.
+Recon is the counter-surveillance mode from the Cardputer ADV firmware. It uses the same rules as that firmware's `lib/recon` classifier, and CI checks that both give the same answer on over 60,000 real and mutated frames. On the CardputerZero it knows more on top of those rules, from Dragon Detector and the public IEEE and Bluetooth registries.
 
-- **What it looks for.** ALPR camera vendors, Flock Safety devices, body cameras (Axon, WatchGuard, Digital Ally), Ring and other camera vendors, drones broadcasting FAA/ASTM **Remote ID** (with drone and operator position when sent), trackers (AirTag and Find My, SmartTag, Google Find My tags, Tile, Chipolo, iBeacons), camera glasses, acoustic sensors such as Raven, serial modules often used in card skimmers, and radio hacking tools like the Flipper Zero. You can turn each of the 13 categories on or off.
+- **What it looks for.** ALPR camera vendors, Flock Safety devices, body cameras (Axon, WatchGuard, Digital Ally), Ring and other camera vendors, drones broadcasting FAA/ASTM **Remote ID** (with drone and operator position when sent), trackers (AirTag and Find My, SmartTag, Google Find My tags, Tile, Chipolo, iBeacons), camera glasses, acoustic sensors such as Raven, serial modules often used in card skimmers, and radio hacking tools like the Flipper Zero. It also knows dashcams and fleet cameras (BlackVue, Thinkware, 70mai, Lytx, Samsara), in-car fleet routers (Sierra Wireless, CradlePoint), Sonos speakers with microphones, the Dragon Detector fox test beacon, and whether a Find My accessory such as an AirTag is away from its owner.
+- **Evil twins and advert spam.** An open network with the same name as a protected one nearby is flagged as a possible evil twin. A sudden flood of new Apple pop-up, Fast Pair, Swift Pair or tracker adverts is flagged as a BLE advert burst. Both follow Dragon Detector's rules: several access points sharing a name, or a crowd's normal phones, are not flagged.
+- **Categories.** You can turn each of the 18 categories on or off. Fleet routers, smart speakers and the fox beacon start off, because they are common and rarely a concern.
 - **Confidence.** Every match is graded low, medium or strong with the evidence behind it, such as a registered vendor prefix, a known advertisement, or a Remote ID message. Random and locally administered addresses never count as vendor evidence. By default the list shows low and up, and alerts start at medium. Both are adjustable.
 - **Alerts.** A banner and a tone for new matches, repeated only after five quiet minutes.
 - **Following.** A device seen at 3 or more places, over at least 10 minutes and 800 m apart, is flagged as following you. This needs a GPS fix.
@@ -130,7 +132,7 @@ Updates come through the Store too: it marks LORA Tunnel when a new version is o
 Connect the CardputerZero to Wi-Fi. Open a terminal on it, or SSH in from a computer (`ssh pi@<device-ip>`; run `hostname -I` on the device to find its address). Then paste:
 
 ```sh
-curl -fL -o /tmp/lora-tunnel.deb https://github.com/valleytechsolutions/LORA-Tunnel/releases/download/cardputer-zero-v1.2.0/lora-tunnel-cardputer-zero.deb && sudo apt install -y /tmp/lora-tunnel.deb && sudo reboot
+curl -fL -o /tmp/lora-tunnel.deb https://github.com/valleytechsolutions/LORA-Tunnel/releases/download/cardputer-zero-v1.3.0/lora-tunnel-cardputer-zero.deb && sudo apt install -y /tmp/lora-tunnel.deb && sudo reboot
 ```
 
 It downloads the release, installs it with its few Python dependencies, and restarts. LORA Tunnel then appears in APPLaunch. To update later, run the same command with the newer version number. All releases are on the [releases page](https://github.com/valleytechsolutions/LORA-Tunnel/releases).
@@ -173,7 +175,7 @@ The Cap LoRa-1262 is driven directly: SX1262 on SPI0 CE1 (`/dev/spidev0.1`), BUS
 ```sh
 cd cardputer-zero
 python3 -m pytest -q tests               # host tests, no hardware needed
-python3 tools/check_recon_parity.py      # Recon vs. the firmware C++ classifier (needs g++)
+python3 tools/check_recon_parity.py      # Recon (extras off) vs. the firmware C++ classifier (needs g++)
 python3 tools/sync_recon_data.py --check # vendor table matches lib/recon
 python3 -m lora_tunnel_zero --demo --png /tmp/frame.png   # run the UI on a desktop
 python3 tools/render_screens.py           # regenerate screenshots/
@@ -185,7 +187,7 @@ To publish to the CardputerZero store with M5Stack's [czdev](https://github.com/
 ```sh
 czdev login
 cd cardputer-zero
-czdev publish --deb build/lora-tunnel_1.2.0_all.deb
+czdev publish --deb build/lora-tunnel_1.3.0_all.deb
 ```
 
 To publish a GitHub release for the one-command install, bump `version` in `app-builder.json` and `lora_tunnel_zero/__init__.py`. Then create a release tagged `cardputer-zero-v<version>`. The **CardputerZero release** workflow tests the app, builds the `.deb` and attaches it to the release.
@@ -200,4 +202,4 @@ LoRa capture, decoding, the UI, Bluetooth scanning and Recon have been checked o
 
 ## License
 
-MIT (see `LICENSE`). The bundled Inter and JetBrains Mono fonts are under the SIL Open Font License; their notices are in `lora_tunnel_zero/assets/fonts/`.
+MIT (see `LICENSE`). Recon's rules come from the firmware's `lib/recon` (Dragon Detector, MIT, by Valleytech Custom Solutions) and the public IEEE MA-L and Bluetooth SIG registries. The bundled Inter and JetBrains Mono fonts are under the SIL Open Font License; their notices are in `lora_tunnel_zero/assets/fonts/`.

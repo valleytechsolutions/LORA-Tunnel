@@ -218,11 +218,11 @@ def encode(case):
 
 def python_result(case):
     if case[0] == "W":
-        r = recon.classify_wifi(case[1], case[2].decode("latin-1"))
+        r = recon.classify_wifi(case[1], case[2].decode("latin-1"), extras=False)
     elif case[0] == "F":
-        r = recon.classify_wifi(None, frame=case[1])
+        r = recon.classify_wifi(None, frame=case[1], extras=False)
     else:
-        r = recon.classify_ble(None if case[1] == "-" else case[1], case[2], case[3], case[4])
+        r = recon.classify_ble(None if case[1] == "-" else case[1], case[2], case[3], case[4], extras=False)
     cat = CPP_CATEGORIES.index(r.get("category"))
     rid = ""
     d = r.get("remote_id")

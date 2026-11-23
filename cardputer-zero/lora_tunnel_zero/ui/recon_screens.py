@@ -11,7 +11,7 @@ from .screens import TOP, Details, ListMixin, Screen, empty_state, fmt_rssi, gps
 CATEGORY_COLOR = {
     "flock": RED, "alpr": RED, "axon": RED, "ring": AMBER, "camera": AMBER, "glasses": AMBER, "drone": CYAN,
     "airtag": (255, 120, 200), "tracker": (255, 120, 200), "ibeacon": MUTED, "raven": AMBER, "skimmer": AMBER,
-    "hacker": (180, 140, 255),
+    "hacker": (180, 140, 255), "fleet": MUTED, "listener": MUTED, "fox": CYAN, "eviltwin": AMBER, "burst": AMBER,
 }
 GRADE_COLOR = {recon.LOW: MUTED, recon.MEDIUM: AMBER, recon.STRONG: RED}
 
@@ -185,6 +185,9 @@ class ReconDetail(Details):
         self.key = (transport, address)
 
     def hints(self, app):
+        device = app.recon.devices.get(self.key)
+        if device is not None and device.get("incident"):
+            return [("↑↓", "Scroll"), ("Esc", "Back")]
         return [("F", "Find it"), ("↑↓", "Scroll"), ("Esc", "Back")]
 
     def rows(self, app):
@@ -192,6 +195,14 @@ class ReconDetail(Details):
         if device is None:
             return [("", "This device is no longer in the live table.", MUTED)]
         now = time.time()
+        if device.get("incident"):
+            return [("Category", recon.CATEGORY_LABELS[device["category"]], CATEGORY_COLOR["burst"]),
+                    ("Kind", device.get("name", "")), ("", device.get("evidence", ""), MUTED),
+                    ("Signal", "%s dBm" % fmt_rssi(device.get("rssi")), rssi_color(device.get("rssi"))),
+                    ("Seen", "%d times, last %s ago, first %s ago" % (device["count"], ago(now - device["last_seen"]),
+                                                                       ago(now - device["first_seen"]))),
+                    ("", "Many addresses at once can be a crowd or advert spam; the sender is not identified.",
+                     FAINT)]
         rows = []
         if device.get("category"):
             rows.append(("Category", recon.CATEGORY_LABELS[device["category"]],
@@ -202,6 +213,10 @@ class ReconDetail(Details):
                 rows.append(("", device["evidence"], MUTED))
             if device.get("vendor"):
                 rows.append(("Vendor", device["vendor"]))
+            if device["category"] == "airtag" and device.get("owner"):
+                rows.append(("Owner", device["owner"], CATEGORY_COLOR["airtag"]))
+            if device["category"] == "eviltwin" and device.get("peer"):
+                rows.append(("Protected", device["peer"]))
         else:
             rows.append(("Category", "Not flagged", MUTED))
         if device.get("follow"):
@@ -258,7 +273,8 @@ class ReconDetail(Details):
         return rows
 
     def handle(self, key, app):
-        if key == "F":
+        device = app.recon.devices.get(self.key)
+        if key == "F" and not (device and device.get("incident")):
             app.push(Finder(*self.key))
             return True
         return super().handle(key, app)

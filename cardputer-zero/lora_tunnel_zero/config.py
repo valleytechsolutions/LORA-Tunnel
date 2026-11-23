@@ -49,7 +49,8 @@ DEFAULTS = {
     "recon_sound": True,
     "recon_display_min": "low",
     "recon_alert_min": "medium",
-    "recon_categories": list(recon.CATEGORIES),
+    "recon_categories": [c for c in recon.CATEGORIES if c not in recon.OFF_BY_DEFAULT],
+    "recon_categories_known": list(recon.CATEGORIES),
 }
 
 _CHOICES = {
@@ -134,7 +135,7 @@ def validate(key, value):
         if any(ord(c) < 32 or ord(c) == 127 or c == ":" for c in value):
             raise ConfigError("Names can't contain control characters or ':'")
         return value.strip()
-    if key == "recon_categories":
+    if key in ("recon_categories", "recon_categories_known"):
         if not isinstance(value, list) or any(v not in recon.CATEGORIES for v in value) or len(set(value)) != len(value):
             raise ConfigError("Unknown Recon category")
         return value
@@ -206,6 +207,11 @@ def load(path=None):
         raise ConfigError("Configuration must be a JSON object")
     for key, value in stored.items():
         result[key] = validate(key, value)
+    if "recon_categories" in stored:
+        known = stored.get("recon_categories_known", recon.FIRMWARE_CATEGORIES)
+        result["recon_categories"] += [c for c in recon.CATEGORIES if c not in known and c not in
+                                       recon.OFF_BY_DEFAULT and c not in result["recon_categories"]]
+        result["recon_categories_known"] = list(recon.CATEGORIES)
     return result
 
 

@@ -8,6 +8,11 @@ OpenDroneID library in lib/opendroneid/. The rules, evidence wording and
 confidence grades match the firmware, so a device is graded the same way on
 the Cardputer ADV, the Heltec V4 and the CardputerZero.
 
+With extras on (the default), the CardputerZero also knows fleet routers,
+dashcams, smart speakers, the Flipper Devices company ID and whether a Find My
+accessory is away from its owner, from the IEEE and Bluetooth SIG registries
+and Dragon Detector. tools/check_recon_parity.py compares with extras off.
+
 A result describes broadcast evidence. It does not establish that a device is
 recording, that it is hostile, or who owns it. Randomized and locally
 administered addresses never supply vendor evidence.
@@ -17,6 +22,7 @@ from bisect import bisect_left
 import math
 import struct
 
+from .recon_extras import EXTRA_PREFIXES
 from .recon_vendors import VENDOR_PREFIXES
 
 NONE, LOW, MEDIUM, STRONG = 0, 1, 2, 3
@@ -41,19 +47,28 @@ CATEGORY_LABELS = {
     "raven": "Acoustic-sensor candidate",
     "skimmer": "Serial-module candidate",
     "hacker": "Radio-tool candidate",
+    "fleet": "Fleet / in-car router",
+    "listener": "Smart speaker (microphones)",
+    "fox": "Dragon fox test beacon",
+    "eviltwin": "SSID conflict (possible evil twin)",
+    "burst": "BLE advert burst",
 }
 CATEGORY_SHORT = {
     "alpr": "ALPR", "flock": "FLOCK", "axon": "BODYCAM", "ibeacon": "BEACON", "ring": "RING",
     "camera": "CAMERA", "drone": "DRONE", "airtag": "FIND MY", "tracker": "TRACKER",
     "glasses": "GLASSES", "raven": "RAVEN", "skimmer": "SERIAL", "hacker": "RADIO TOOL",
+    "fleet": "FLEET", "listener": "SPEAKER", "fox": "FOX", "eviltwin": "TWIN", "burst": "BURST",
 }
 CATEGORIES = tuple(CATEGORY_LABELS)
+OFF_BY_DEFAULT = ("fleet", "listener", "fox")
+FIRMWARE_CATEGORIES = CATEGORIES[:13]
 # Higher sorts first on the Recon list (firmware familyPriority).
 PRIORITY = {"flock": 100, "alpr": 100, "axon": 95, "ring": 90, "camera": 90, "glasses": 90, "drone": 85,
-            "hacker": 50, "raven": 50, "skimmer": 50, "tracker": 10, "airtag": 10, "ibeacon": 10}
+            "hacker": 50, "raven": 50, "skimmer": 50, "fleet": 50, "eviltwin": 50, "burst": 50, "tracker": 10, "airtag": 10,
+            "ibeacon": 10, "listener": 10, "fox": 10}
 
 _FAMILY_PRIORITY = {"Flock": 100, "Alpr": 100, "Axon": 95, "Ring": 90, "Camera": 90, "Meta": 90, "Drone": 85,
-                    "Flipper": 75, "Wifi": 20, "Ble": 20}
+                    "Flipper": 75, "Fleet": 50, "Listener": 10, "Fox": 10, "Wifi": 20, "Ble": 20}
 _TRACKER_FAMILIES = {"Tracker", "SmartTag", "GoogleTag", "Tile", "IBeacon"}
 
 
@@ -101,6 +116,7 @@ _FLOCK_OUIS = frozenset((
     0x700894, 0x588e81, 0xec1bbd, 0x5800e3, 0x9035ea, 0x5c93a2, 0x646e69, 0x14b5cd, 0xb41e52, 0x00037f))
 _VENDOR_KEYS = [row[0] for row in VENDOR_PREFIXES]
 _CONF = {"Low": LOW, "Medium": MEDIUM, "Strong": STRONG}
+_EXTRA = {row[0]: row[1:] for row in EXTRA_PREFIXES}
 
 
 def flock_prefix(mac):
@@ -129,6 +145,24 @@ def address_hint(mac, public, current):
     if flock_prefix(mac):
         return ("Flock", LOW, "Flock research OUI; shared chip vendor possible")
     return current
+
+
+def extra_hint(mac, current):
+    """Registry evidence the CardputerZero adds, from a globally administered address only."""
+    if not mac or mac[0] & 3 or current[1] >= MEDIUM:
+        return current
+    row = _EXTRA.get(_prefix(mac))
+    if row and _CONF[row[1]] > current[1]:
+        return (row[0], _CONF[row[1]], row[2])
+    return current
+
+
+def _extra_ble(match, parsed):
+    if match[1] == NONE and parsed["sonos"]:
+        return ("Listener", MEDIUM, "Sonos company ID; speaker with microphones, activity unverified")
+    if parsed["flipper_company"] and (match[1] == NONE or (match[0] == "Flipper" and match[1] < MEDIUM)):
+        return ("Flipper", MEDIUM, "Flipper Devices company ID; activity unverified")
+    return match
 
 
 def named(name, base):
@@ -487,7 +521,8 @@ def parse_ble(p, adv_length=0):
     s = dict.fromkeys(("xuntong", "lux", "meta", "findmy", "flipper", "meta_service", "dult", "axon_company",
                        "axon_service", "smarttag", "biscuit", "flock_service", "snap", "snap_service", "vuzix",
                        "chipolo", "axon_bwc", "raven", "tile", "google", "ibeacon", "serial", "fox",
-                       "google_service", "drone_service", "apple_pairing", "ibeacon_extra"), False)
+                       "google_service", "drone_service", "apple_pairing", "ibeacon_extra", "sonos",
+                       "flipper_company", "apple_popup", "fast_pair", "swift_pair", "separated"), False)
     raven_services, appearance, name, drone, company = 0, 0, "", None, None
     beacon = None
 
@@ -505,6 +540,7 @@ def parse_ble(p, adv_length=0):
         s["serial"] |= uuid == 0x1101
         s["google_service"] |= uuid == 0xfeaa
         s["drone_service"] |= uuid == 0xfffa
+        s["fast_pair"] |= uuid == 0xfe2c
         if 0x3100 <= uuid <= 0x3500 and not uuid & 0xff:
             s["raven"] = True
             raven_services |= 1 << ((uuid >> 8) - 0x31)
@@ -528,12 +564,17 @@ def parse_ble(p, adv_length=0):
             s["vuzix"] |= cid == 0x060c
             s["chipolo"] |= cid == 0x08c3
             s["snap"] |= cid == 0x03c2
+            s["sonos"] |= cid == 0x05a7
+            s["flipper_company"] |= cid == 0x0e29
+            s["swift_pair"] |= cid == 0x0006 and z >= 3 and d[2] == 3
             is_ibeacon = cid == 0x004c and z >= 25 and d[2] == 2 and d[3] == 0x15
             s["ibeacon"] |= is_ibeacon
             s["ibeacon_extra"] |= is_ibeacon and z > 25
             s["apple_pairing"] |= cid == 0x004c and z == 29
             if cid == 0x004c and z >= 4:
-                s["findmy"] |= d[2] == 0x12 and d[3] == 0x19 and z >= 29
+                s["separated"] |= d[2] == 0x12 and d[3] == 0x19 and z >= 29
+                s["findmy"] |= s["separated"]
+                s["apple_popup"] |= d[2] in (0x07, 0x0f)
             if cid == 0x004c and z == 25 and d[2] == 2 and d[3] == 0x15 and beacon is None:
                 beacon = {"uuid": d[4:20].hex(), "major": d[20] << 8 | d[21], "minor": d[22] << 8 | d[23],
                           "measured_power": struct.unpack("b", d[24:25])[0]}
@@ -622,7 +663,11 @@ def parse_ble(p, adv_length=0):
             match = ("Drone", LOW, "FFFA service; no valid aircraft Remote ID decoded")
         elif s["apple_pairing"]:
             match = ("Tracker", LOW, "Apple pairing-size advert; may be AirTag, AirPods or other accessory")
-    return {"valid": True, "name": name, "company": company, "match": match, "drone": drone, "beacon": beacon}
+    groups = tuple(g for g, flag in (("apple", s["apple_popup"]), ("fastpair", s["fast_pair"]),
+                                     ("swiftpair", s["swift_pair"])) if flag)
+    return {"valid": True, "name": name, "company": company, "match": match, "drone": drone, "beacon": beacon,
+            "sonos": s["sonos"], "flipper_company": s["flipper_company"], "separated": s["separated"],
+            "groups": groups}
 
 
 # -------------------------------------------------------------- Axon clues
@@ -722,17 +767,19 @@ _FAMILY_CATEGORY = {"Flock": "flock", "Alpr": "alpr", "Axon": "axon", "IBeacon":
                     "Camera": "camera", "Drone": "drone", "SmartTag": "tracker", "GoogleTag": "tracker",
                     "Tile": "tracker", "Meta": "glasses", "Raven": "raven", "Skimmer": "skimmer",
                     "Pineapple": "hacker", "Pwnagotchi": "hacker", "Nyanbox": "hacker", "Halehound": "hacker",
-                    "Flipper": "hacker", "Biscuit": "hacker"}
+                    "Flipper": "hacker", "Biscuit": "hacker", "Fleet": "fleet", "Listener": "listener", "Fox": "fox"}
 
 
-def _result(match, drone=None, beacon=None):
+def _result(match, drone=None, beacon=None, extras=True):
     family, confidence, evidence = match
     category = _FAMILY_CATEGORY.get(family)
     if family == "Tracker":
         category = "airtag" if any(w in evidence for w in ("Find My", "Apple", "AirTag")) else "tracker"
-    if category is None or confidence == NONE:
+    if category is None or confidence == NONE or not (extras or category in FIRMWARE_CATEGORIES):
         return {"category": None, "confidence": NONE, "payload_valid": True}
-    if category in ("airtag", "ibeacon"):
+    if category == "listener":
+        vendor = "Sonos" if "Sonos" in evidence else ""
+    elif category in ("airtag", "ibeacon"):
         vendor = "Apple format"
     elif "Xuntong" in evidence:
         vendor = "Xuntong"
@@ -775,7 +822,7 @@ def parse_mac(text):
         return None
 
 
-def classify_wifi(address, ssid="", frame=None):
+def classify_wifi(address, ssid="", frame=None, extras=True):
     """Classify an AP from its BSSID and SSID, or a full 802.11 frame without FCS."""
     if frame is not None:
         if len(frame) > MAX_WIFI_BYTES:
@@ -798,7 +845,10 @@ def classify_wifi(address, ssid="", frame=None):
                     at += length
         if not parsed["valid"]:
             return {"category": None, "confidence": NONE, "payload_valid": False}
-        return _result(_with_axon(parsed["match"], signals), parsed.get("drone"))
+        match = _with_axon(parsed["match"], signals)
+        if extras and len(frame) >= 16:
+            match = extra_hint(frame[10:16], match)
+        return _result(match, parsed.get("drone"), extras=extras)
     mac = parse_mac(address) if isinstance(address, str) else address
     if mac is None:
         return {"category": None, "confidence": NONE, "payload_valid": False}
@@ -808,10 +858,12 @@ def classify_wifi(address, ssid="", frame=None):
         signals = _AXON_OUI if _axon_prefix(mac) else _BODYCAM if _bodycam_prefix(mac) else \
             _AXON_RESEARCH if _axon_research_prefix(mac) else 0
         match = _with_axon(match, signals)
-    return _result(match)
+    if extras:
+        match = extra_hint(mac, match)
+    return _result(match, extras=extras)
 
 
-def classify_ble(address, address_type, ad, adv_length=0):
+def classify_ble(address, address_type, ad, adv_length=0, extras=True):
     """address_type: 0 public, 1 random, 2 public identity, 3 random identity."""
     if not ad or len(ad) > MAX_BLE_BYTES or adv_length > len(ad):
         return {"category": None, "confidence": NONE, "payload_valid": False}
@@ -828,9 +880,18 @@ def classify_ble(address, address_type, ad, adv_length=0):
     match = _with_axon(parsed["match"], signals)
     if public:
         match = address_hint(mac, True, match)
-    result = _result(match, parsed.get("drone"), parsed.get("beacon"))
+    if extras:
+        match = _extra_ble(match, parsed)
+        if public:
+            match = extra_hint(mac, match)
+    result = _result(match, parsed.get("drone"), parsed.get("beacon"), extras)
     if parsed.get("name"):
         result["name"] = parsed["name"]
+    if extras:
+        if parsed["separated"] and result.get("category") == "airtag":
+            result["owner"] = "away from owner"
+        if parsed["groups"]:
+            result["groups"] = parsed["groups"]
     return result
 
 
